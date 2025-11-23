@@ -1,0 +1,23 @@
+// Firestore rules template - customize for your needs
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /patients/{patientId} {
+      allow read: if isOwnerOrProvider();
+      allow write: if isProvider();
+    }
+    match /appointments/{id} {
+      allow read, write: if request.auth != null;
+    }
+    match /plans/{id} {
+      allow read: if request.auth != null;
+      allow write: if isProvider();
+    }
+    match /protocols/{id} {
+      allow read: if request.auth != null;
+      allow write: if isProvider();
+    }
+
+    function isProvider(){ return request.auth != null && request.auth.token.role == 'provider'; }
+    function isOwnerOrProvider(){ return isProvider() || (request.auth != null && request.auth.uid == resource.data.ownerId); }
+  }
+}

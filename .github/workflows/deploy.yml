@@ -24,9 +24,9 @@ jobs:
         working-directory: ./functions
         run: npm ci
 
-      ###################################################################
-      # AUTENTICAÇÃO USANDO GOOGLE_SERVICE_ACCOUNT_JSON (JSON PURO)
-      ###################################################################
+      ##########################################################################
+      # AUTENTICAÇÃO USANDO SERVICE ACCOUNT (JSON PURO)
+      ##########################################################################
       - name: Criar arquivo da Service Account
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
@@ -35,40 +35,30 @@ jobs:
             echo "❌ ERRO: Secret GOOGLE_SERVICE_ACCOUNT_JSON está vazio!"
             exit 1
           fi
-          echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > "${RUNNER_TEMP}/service-account.json"
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > "${RUNNER_TEMP}/service-account.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/service-account.json" >> $GITHUB_ENV
 
-      - name: Autenticar no Firebase (GCloud Service Account)
+      - name: Autenticar no GCloud
         run: |
           gcloud auth activate-service-account --key-file="${RUNNER_TEMP}/service-account.json"
           gcloud config set project "${{ secrets.FIREBASE_PROJECT_ID }}"
 
-      ###################################################################
-      # DEFINIR CONFIGURAÇÃO (FUNCTIONS CONFIG)
-      ###################################################################
-      - name: Configurar ambiente de funções
+      ##########################################################################
+      # DEFINIR APENAS CONFIGURAÇÕES QUE VOCÊ USA (Stripe)
+      ##########################################################################
+      - name: Configurar Stripe
         run: |
           firebase functions:config:set \
             stripe.secret="${{ secrets.STRIPE_SECRET }}" \
             stripe.webhook_secret="${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
             --project="${{ secrets.FIREBASE_PROJECT_ID }}"
 
-          # Define Apple keys APENAS se secret existir
-          if [ -n "${{ secrets.APPLE_PRIVATE_KEY_B64 }}" ]; then
-            APPLE_KEY=$(echo "${{ secrets.APPLE_PRIVATE_KEY_B64 }}" | base64 --decode)
-            firebase functions:config:set \
-              apple.private_key="$APPLE_KEY" \
-              apple.key_id="${{ secrets.APPLE_KEY_ID }}" \
-              apple.issuer_id="${{ secrets.APPLE_ISSUER_ID }}" \
-              --project="${{ secrets.FIREBASE_PROJECT_ID }}"
-          fi
-
-      ###################################################################
-      # DEPLOY
-      ###################################################################
-      - name: Deploy Firebase Functions
+      ##########################################################################
+      # DEPLOY DAS FUNCTIONS
+      ##########################################################################
+      - name: Deploy Functions
         run: |
           firebase deploy --only functions --project="${{ secrets.FIREBASE_PROJECT_ID }}"
 
       - name: Finalização
-        run: echo "✔ Deploy concluído!"
+        run: echo "✔ Deploy concluído com sucesso!"

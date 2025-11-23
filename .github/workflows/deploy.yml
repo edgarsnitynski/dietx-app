@@ -19,11 +19,10 @@ jobs:
 
       - name: Instalar CLI do Firebase
         run: npm install -g firebase-tools
-
-      - name: Instalar dependências das Functions
-        working-directory: ./functions
-        run: npm ci
-
+      - name: Install dependencies (functions)
+      working-directory: ./functions
+       run: npm install
+     
       ##########################################################################
       # AUTENTICAÇÃO USANDO SERVICE ACCOUNT (JSON PURO)
       ##########################################################################

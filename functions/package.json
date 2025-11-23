@@ -5,7 +5,8 @@
     "firebase-functions": "^7.0.0",
     "googleapis": "^116.0.0",
     "jsonwebtoken": "^9.0.0",
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^2.6.7",
+    "stripe": "^20.0.0"
   },
   "devDependencies": {
     "babel-jest": "^29.6.1",

@@ -1,5 +1,4 @@
-
-name: Deploy Firebase Functions
+name: Implantar Funções do Firebase
 
 on:
   push:
@@ -9,51 +8,67 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install Firebase CLI
+      - name: Instalar CLI do Firebase
         run: npm install -g firebase-tools
 
-      - name: Install dependencies (functions)
+      - name: Instalar dependências das Functions
         working-directory: ./functions
         run: npm ci
 
-      - name: Authenticate to Firebase
+      ###################################################################
+      # AUTENTICAÇÃO USANDO GOOGLE_SERVICE_ACCOUNT_JSON (JSON PURO)
+      ###################################################################
+      - name: Criar arquivo da Service Account
         env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
-          echo "$FIREBASE_TOKEN" | firebase login:ci --no-localhost || true
-          firebase projects:list || true
-
-      - name: Configure function environment (set secrets)
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: |
-          # Example: set stripe and apple secrets from GitHub Secrets into functions config
-          firebase functions:config:set stripe.secret="${{ secrets.STRIPE_SECRET }}" stripe.webhook_secret="${{ secrets.STRIPE_WEBHOOK_SECRET }}" --project="${{ secrets.FIREBASE_PROJECT_ID }}"
-
-          # Set Google service account JSON (base64 encoded recommended)
-          if [ -n "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}" ]; then
-            firebase functions:config:set google.service_account_json="${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}" --project="${{ secrets.FIREBASE_PROJECT_ID }}" || true
+          if [ -z "$GOOGLE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "❌ ERRO: Secret GOOGLE_SERVICE_ACCOUNT_JSON está vazio!"
+            exit 1
           fi
+          echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > "${RUNNER_TEMP}/service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/service-account.json" >> $GITHUB_ENV
 
-          # Set Apple keys (private key should be base64-encoded to preserve newlines)
+      - name: Autenticar no Firebase (GCloud Service Account)
+        run: |
+          gcloud auth activate-service-account --key-file="${RUNNER_TEMP}/service-account.json"
+          gcloud config set project "${{ secrets.FIREBASE_PROJECT_ID }}"
+
+      ###################################################################
+      # DEFINIR CONFIGURAÇÃO (FUNCTIONS CONFIG)
+      ###################################################################
+      - name: Configurar ambiente de funções
+        run: |
+          firebase functions:config:set \
+            stripe.secret="${{ secrets.STRIPE_SECRET }}" \
+            stripe.webhook_secret="${{ secrets.STRIPE_WEBHOOK_SECRET }}" \
+            --project="${{ secrets.FIREBASE_PROJECT_ID }}"
+
+          # Define Apple keys APENAS se secret existir
           if [ -n "${{ secrets.APPLE_PRIVATE_KEY_B64 }}" ]; then
-            APPLE_PRIVATE_KEY=$(echo "${{ secrets.APPLE_PRIVATE_KEY_B64 }}" | base64 --decode)
-            firebase functions:config:set apple.private_key="$APPLE_PRIVATE_KEY" apple.key_id="${{ secrets.APPLE_KEY_ID }}" apple.issuer_id="${{ secrets.APPLE_ISSUER_ID }}" --project="${{ secrets.FIREBASE_PROJECT_ID }}" || true
+            APPLE_KEY=$(echo "${{ secrets.APPLE_PRIVATE_KEY_B64 }}" | base64 --decode)
+            firebase functions:config:set \
+              apple.private_key="$APPLE_KEY" \
+              apple.key_id="${{ secrets.APPLE_KEY_ID }}" \
+              apple.issuer_id="${{ secrets.APPLE_ISSUER_ID }}" \
+              --project="${{ secrets.FIREBASE_PROJECT_ID }}"
           fi
 
-      - name: Deploy functions
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+      ###################################################################
+      # DEPLOY
+      ###################################################################
+      - name: Deploy Firebase Functions
         run: |
           firebase deploy --only functions --project="${{ secrets.FIREBASE_PROJECT_ID }}"
 
-      - name: Post-deploy cleanup
-        run: echo "Deployment finished."
+      - name: Finalização
+        run: echo "✔ Deploy concluído!"
